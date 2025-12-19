@@ -15,13 +15,15 @@ function selectAlgo(algo) {
     const inputLabel = document.querySelector('label[for="inputText"]') || document.querySelector('.small.text-secondary');
 
     // Dynamic UI configuration
-    if (algo === 'rle' || algo === 'shannon' || algo === 'sf'|| algo === 'huffman') {
+    if (algo === 'rle' || algo === 'shannon' || algo === 'sf'|| algo === 'huffman' || algo === 'arithmetic' || algo === 'lzw') {
         alphabetSection.style.display = "none";
         betaSection.style.display = "none";
         
         if (algo === 'rle') title.innerText = "Run-Length Encoding (RLE)";
         else if (algo === 'shannon') title.innerText = "Shannon Coding";
         else if (algo === 'huffman') title.innerText = "Huffman Coding";
+        else if (algo === 'arithmetic') title.innerText = "Arithmetic Coding";
+        else if (algo === 'lzw') title.innerText = "LZW Compression";
         else title.innerText = "Shannon-Fano Algorithm";
 
     } else if (algo === 'w_mtf') {

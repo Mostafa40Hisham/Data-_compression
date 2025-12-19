@@ -3,8 +3,12 @@ from collections import Counter
 import heapq
 import math
 import itertools
+from decimal import Decimal, getcontext
 
 app = Flask(__name__)
+
+# Set precision for Arithmetic Coding
+getcontext().prec = 50
 
 # --- UTILITY FUNCTIONS ---
 
@@ -30,6 +34,167 @@ def decimal_to_binary(fraction, max_bits=64):
         else:
             binary += '0'
     return binary
+
+# --- ARITHMETIC CODING ---
+
+def arithmetic_encode(text):
+    """Arithmetic Encoding Algorithm"""
+    if not text:
+        return ""
+    
+    # 1. Calculate frequency and probability of each symbol
+    freq = Counter(text)
+    total = len(text)
+    
+    # Sort symbols for consistent ordering
+    symbols = sorted(freq.keys())
+    
+    # 2. Build cumulative probability ranges
+    cumulative_prob = {}
+    low_range = Decimal(0)
+    
+    for symbol in symbols:
+        prob = Decimal(freq[symbol]) / Decimal(total)
+        cumulative_prob[symbol] = {
+            'low': low_range,
+            'high': low_range + prob
+        }
+        low_range += prob
+    
+    # 3. Encode the text
+    low = Decimal(0)
+    high = Decimal(1)
+    
+    for char in text:
+        range_width = high - low
+        high = low + range_width * cumulative_prob[char]['high']
+        low = low + range_width * cumulative_prob[char]['low']
+    
+    # 4. Choose a value in the final range (midpoint)
+    encoded_value = (low + high) / 2
+    
+    # Store frequency table as well for decoding
+    freq_str = str(dict(freq))
+    
+    return f"{encoded_value}|{freq_str}|{len(text)}"
+
+def arithmetic_decode(data):
+    """Arithmetic Decoding Algorithm"""
+    try:
+        # Parse encoded data
+        parts = data.split("|")
+        encoded_value = Decimal(parts[0])
+        freq = eval(parts[1])
+        length = int(parts[2])
+        
+        # Rebuild cumulative probability ranges
+        total = sum(freq.values())
+        symbols = sorted(freq.keys())
+        
+        cumulative_prob = {}
+        low_range = Decimal(0)
+        
+        for symbol in symbols:
+            prob = Decimal(freq[symbol]) / Decimal(total)
+            cumulative_prob[symbol] = {
+                'low': low_range,
+                'high': low_range + prob
+            }
+            low_range += prob
+        
+        # Decode
+        result = []
+        value = encoded_value
+        
+        for _ in range(length):
+            # Find which symbol's range contains the value
+            for symbol in symbols:
+                if cumulative_prob[symbol]['low'] <= value < cumulative_prob[symbol]['high']:
+                    result.append(symbol)
+                    
+                    # Update value for next symbol
+                    range_width = cumulative_prob[symbol]['high'] - cumulative_prob[symbol]['low']
+                    value = (value - cumulative_prob[symbol]['low']) / range_width
+                    break
+        
+        return "".join(result)
+    except Exception as e:
+        return f"Arithmetic Decoding Error: {str(e)}"
+
+# --- LZW COMPRESSION ---
+
+def lzw_encode(text):
+    """LZW Encoding Algorithm"""
+    if not text:
+        return ""
+    
+    # 1. Initialize dictionary with single characters
+    dict_size = 256
+    dictionary = {chr(i): i for i in range(dict_size)}
+    
+    # 2. Encode
+    result = []
+    current_string = ""
+    
+    for char in text:
+        combined = current_string + char
+        
+        if combined in dictionary:
+            current_string = combined
+        else:
+            # Output code for current_string
+            result.append(dictionary[current_string])
+            
+            # Add combined to dictionary
+            dictionary[combined] = dict_size
+            dict_size += 1
+            
+            # Start new string with current char
+            current_string = char
+    
+    # Output code for remaining string
+    if current_string:
+        result.append(dictionary[current_string])
+    
+    return ",".join(map(str, result))
+
+def lzw_decode(data):
+    """LZW Decoding Algorithm"""
+    try:
+        # Parse encoded data
+        codes = [int(x.strip()) for x in data.split(",")]
+        
+        # 1. Initialize dictionary with single characters
+        dict_size = 256
+        dictionary = {i: chr(i) for i in range(dict_size)}
+        
+        # 2. Decode
+        result = []
+        
+        # Read first code
+        previous_code = codes[0]
+        result.append(dictionary[previous_code])
+        
+        for code in codes[1:]:
+            if code in dictionary:
+                entry = dictionary[code]
+            elif code == dict_size:
+                # Special case: code not in dictionary yet
+                entry = dictionary[previous_code] + dictionary[previous_code][0]
+            else:
+                return f"LZW Decoding Error: Invalid code {code}"
+            
+            result.append(entry)
+            
+            # Add new entry to dictionary
+            dictionary[dict_size] = dictionary[previous_code] + entry[0]
+            dict_size += 1
+            
+            previous_code = code
+        
+        return "".join(result)
+    except Exception as e:
+        return f"LZW Decoding Error: {str(e)}"
 
 # --- SHANNON-FANO CODING (Based on your Pseudocode) ---
 
@@ -331,6 +496,10 @@ def run_algorithm():
         result = rle_encode(text) if mode == "encode" else rle_decode(text)
     elif algo == "huffman":
         result = huffman_encode(text) if mode == "encode" else huffman_decode(text)
+    elif algo == "arithmetic":
+        result = arithmetic_encode(text) if mode == "encode" else arithmetic_decode(text)
+    elif algo == "lzw":
+        result = lzw_encode(text) if mode == "encode" else lzw_decode(text)
     else:
         result = "Algorithm Not Found"
 
